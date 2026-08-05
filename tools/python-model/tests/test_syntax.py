@@ -3,7 +3,7 @@ import unittest
 from followee_model import syntax
 
 
-class AbsoluteUriTests(unittest.TestCase):
+class UriTests(unittest.TestCase):
     def test_valid(self):
         for uri in (
             "https://alice.example/feed.xml",
@@ -20,25 +20,34 @@ class AbsoluteUriTests(unittest.TestCase):
             "https://192.0.2.7:80/x",
             "scheme+ext.x-1:",
             "https://example.com/a%2Fb",
+            # v0.7 Section 7.2: the URI production permits fragments.
+            "https://example.com/profile#about",
+            "did:web:example.com#key-1",
+            "https://example.com/a?x=1#y/z?w",
+            "https://example.com/#",  # empty fragment is valid
+            "https://example.com/#%20x",
         ):
-            self.assertTrue(syntax.is_absolute_uri(uri), uri)
+            self.assertTrue(syntax.is_uri(uri), uri)
 
     def test_invalid(self):
         for uri in (
             "",
-            "/relative/path",
-            "//example.com/x",
-            "example.com/x",
+            "/relative/path",  # absolute-path reference
+            "//example.com/x",  # network-path reference
+            "example.com/x",  # relative-path reference
+            "?view=full",  # query-only reference
+            "#about",  # fragment-only reference
             "1https://example.com",
             "https://exa mple.com/",
             "https://example.com/%2",
             "https://example.com/%zz",
             "https://example.com/\u00e9",
-            "https://example.com/a#frag",  # absolute-URI has no fragment
+            "https://example.com/a#b#c",  # '#' not permitted inside fragment
+            "https://example.com/#frag%2",  # bad pct-encoding in fragment
             "http s://example.com",
             ":nopath",
         ):
-            self.assertFalse(syntax.is_absolute_uri(uri), uri)
+            self.assertFalse(syntax.is_uri(uri), uri)
 
 
 class MediaTypeTests(unittest.TestCase):

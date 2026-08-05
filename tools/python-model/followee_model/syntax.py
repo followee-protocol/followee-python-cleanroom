@@ -3,8 +3,9 @@
 All checks are grammar-only: registry contents are never consulted
 (Section 7.3).  Grammars implemented:
 
-* absolute URI: RFC 3986 ``absolute-URI`` (scheme required; no fragment —
-  see AUTHORING-RECORD.md for the recorded interpretation);
+* URI: the RFC 3986 Section 3 ``URI`` production (scheme required; query
+  and fragment permitted; every relative-reference form is malformed), as
+  required by Section 7.2 of specification v0.7;
 * mediaType: RFC 6838 ``restricted-name "/" restricted-name``;
 * language: RFC 5646 ``Language-Tag`` well-formedness, case-insensitive,
   including the fixed grandfathered productions;
@@ -14,7 +15,7 @@ All checks are grammar-only: registry contents are never consulted
 
 import re
 
-# --- RFC 3986 absolute-URI -------------------------------------------------
+# --- RFC 3986 URI ----------------------------------------------------------
 
 _HEXDIG = "0-9A-Fa-f"
 _PCT = f"%[{_HEXDIG}]{{2}}"
@@ -54,14 +55,17 @@ _PATH_ABSOLUTE = f"/(?:{_SEGMENT_NZ}(?:/{_SEGMENT})*)?"
 _PATH_ROOTLESS = f"{_SEGMENT_NZ}(?:/{_SEGMENT})*"
 _HIER_PART = f"(?://{_AUTHORITY}{_PATH_ABEMPTY}|{_PATH_ABSOLUTE}|{_PATH_ROOTLESS}|)"
 _QUERY = f"(?:{_PCHAR}|[/?])*"
-_ABSOLUTE_URI = re.compile(f"{_SCHEME}:{_HIER_PART}(?:\\?{_QUERY})?")
+_FRAGMENT = f"(?:{_PCHAR}|[/?])*"
+_URI = re.compile(f"{_SCHEME}:{_HIER_PART}(?:\\?{_QUERY})?(?:\\#{_FRAGMENT})?")
 
 
-def is_absolute_uri(value) -> bool:
+def is_uri(value) -> bool:
+    """RFC 3986 ``URI`` production (Section 7.2): scheme required, query
+    and fragment optional, relative references malformed."""
     return (
         isinstance(value, str)
         and value.isascii()
-        and _ABSOLUTE_URI.fullmatch(value) is not None
+        and _URI.fullmatch(value) is not None
     )
 
 

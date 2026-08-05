@@ -132,7 +132,8 @@ def validate_extension_value(value, context: str) -> None:
 
 
 def validate_extension_map(extensions, context: str) -> None:
-    """Absolute-URI-keyed extension map (Sections 5.6 and 7.5)."""
+    """Extension map keyed by URI strings satisfying Section 7.2
+    (Sections 5.6 and 7.5)."""
     if not isinstance(extensions, dict):
         raise _schema(f"{context}: extension map must be a map")
     for key, value in extensions.items():
@@ -140,8 +141,8 @@ def validate_extension_map(extensions, context: str) -> None:
             raise _schema(f"{context}: extension keys must be text strings")
         if _utf8_length(key) > MAX_EXTENSION_KEY_BYTES:
             raise _schema(f"{context}: extension key exceeds 256 bytes")
-        if not syntax.is_absolute_uri(key):
-            raise _schema(f"{context}: extension key must be an absolute URI")
+        if not syntax.is_uri(key):
+            raise _schema(f"{context}: extension key must be an RFC 3986 URI")
         validate_extension_value(value, context)
 
 
@@ -150,8 +151,8 @@ def _validate_uri_field(value, name: str) -> None:
         raise _schema(f"{name} must be a text string")
     if _utf8_length(value) > MAX_URI_BYTES:
         raise _schema(f"{name} exceeds {MAX_URI_BYTES} bytes")
-    if not syntax.is_absolute_uri(value):
-        raise _schema(f"{name} must be an absolute URI")
+    if not syntax.is_uri(value):
+        raise _schema(f"{name} must be an RFC 3986 URI")
 
 
 def validate_service_entry(entry, index: int, seen_ids: set) -> None:
@@ -208,8 +209,8 @@ def validate_service_entry(entry, index: int, seen_ids: set) -> None:
             raise _schema(f"{name}: rel must be a text string")
         if _utf8_length(rel) > MAX_REL_BYTES:
             raise _schema(f"{name}: rel exceeds 256 bytes")
-        if not syntax.is_rel_token(rel) and not syntax.is_absolute_uri(rel):
-            raise _schema(f"{name}: rel must be a reg-rel-type or absolute URI")
+        if not syntax.is_rel_token(rel) and not syntax.is_uri(rel):
+            raise _schema(f"{name}: rel must be a reg-rel-type or RFC 3986 URI")
 
 
 def validate_migration(migration, own_did: str) -> None:

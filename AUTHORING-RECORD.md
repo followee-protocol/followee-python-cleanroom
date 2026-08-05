@@ -51,6 +51,9 @@ clean-room procedure.  Numbers refer to the specification.
    scheme requirement was intended.  **Chosen:** the literal `absolute-URI`
    production — a fragment (`...#x`) makes the field malformed.  Flagged as
    a likely differential-test divergence point.
+   *Resolved by specification v0.7*, which pins the RFC 3986 `URI`
+   production (fragments and queries permitted); see the v0.7 maintenance
+   section below.
 2. **Error classification under multiple failures (8.1).**  The permitted
    reordering of "cheap independent checks" with an "equivalent" final
    result leaves the reported *code* ambiguous when several checks would
@@ -178,10 +181,108 @@ in receiving or fixing them.
    positive tests for both forms.  The recorded `absolute-URI`/fragment
    interpretation (ambiguity 1 above) is deliberately unchanged.
 
+## v0.7 maintenance pass (2026-08-05)
+
+Bounded maintenance pass under the updated `AUTHORING-CONSTRAINTS.md`.
+
+**Revisions.**
+- v0.6 base model: commit `70e4a6caa8720f1dfbb3b183a5d305fca0cf3e57`
+  (`cleanroom-v0.6-review1`), itself descending from the v0.6 freeze
+  `7ca1f623453065deefd1e6cfdf15e135d523dd7e`.
+- v0.6 specification input: `followee-protocol/followee` commit
+  `44c68660f0c0a1e3504c0f9794b8c51058da6f18` (recorded in this
+  repository's history at commit `70b393f`).
+- v0.7 specification input: `followee-protocol/followee` commit
+  `abc9a55d90f1026e6509207abda73e5dc6d14241`, SHA-256
+  `2b264823ba68d9a7d69ce68de5c1408ac8a3d54ff6d726ab89ee2baa2707c81f`,
+  pinned by repository commit `6b944b952d1daec6840deae7e07f304f5349637d`.
+- Appendix B fixture unchanged (SHA-256
+  `f188316ffd7ad07fe94a842027f1ea7596e42a2f00b0691c1096fa2bfaddb717`).
+
+The semantic delta was determined exclusively from this repository's own
+Git history (`git diff 70e4a6c..6b944b9 -- Followee-Specification.md`)
+plus a full read of the v0.6 text earlier in the clean room; no other
+implementation was consulted.
+
+**Semantic differences identified (v0.6 → v0.7).**
+
+1. *Section 7.2 URI grammar (normative behavior change).*  URI fields now
+   match the RFC 3986 Section 3 `URI` production: a scheme is required and
+   the optional query and fragment components are permitted; every
+   `relative-ref` form (network-path, absolute-path, relative-path,
+   query-only, fragment-only) is malformed.  This resolves recorded
+   ambiguity 1 — in the opposite direction from the v0.6 model's chosen
+   `absolute-URI` reading, so fragments change from rejected to accepted.
+   Sections 5.6, 7.1, and 7.3 now phrase avatar, `alsoKnownAs` entries,
+   service `type` (URI form), `endpoint`, `rel` (URI form), and extension
+   keys as "URI satisfying Section 7.2".  **Code change:**
+   `syntax.py` — `is_absolute_uri()` replaced by `is_uri()` with an
+   optional `#fragment` component (fragment grammar `*( pchar / "/" /
+   "?" )`); `record.py` call sites and messages updated.  Migration
+   values are unaffected (still canonical Followee DIDs, not Section 7.2
+   URIs).
+2. *Section 7.2 IPvFuture case (codifies existing behavior).*  New
+   paragraph: RFC ABNF string literals are case-insensitive (RFC 5234),
+   so both `v` and `V` introduce IPvFuture.  The model already conformed
+   via the v0.6 post-freeze review fix.  **Tests only.**
+3. *Section 6.1 exact label typing plus Appendix B.7 item 17 and the
+   Section 20.1 additions (codifies existing behavior).*  Integer map
+   labels are CBOR major-type-0 keys; `false`/`true` MUST NOT be accepted
+   as labels `0`/`1` even where the host language compares them equal,
+   and key type must be enforced before host-language lookup or
+   set-equality.  B.7 item 17 requires an otherwise consistent,
+   descriptor-bound, correctly signed boolean-label record to fail with
+   `schemaViolation`.  The model already conformed via the v0.6
+   post-freeze review fix.  **Tests only.**
+4. *Non-normative for this model:* version header v0.7, expanded
+   Section 20.1 conformance list, new Appendix C reference to RFC 5234.
+   Appendix B vectors are unchanged (fixture hash identical).
+
+**Changes made.**
+
+- Code: `followee_model/syntax.py` (URI production with optional
+  fragment; function renamed `is_uri`), `followee_model/record.py`
+  (call sites, error messages, docstring), `followee_model/__init__.py`
+  (docstring version).
+- Tests: `tests/test_syntax.py` (fragment/query positives including the
+  Section 7.2 examples, all five relative-reference negatives, fragment
+  edge cases); new `tests/test_v07_conformance.py` (one focused class per
+  normative change: URI production exercised on every URI-bearing record
+  field including extension keys, with the 2,048-byte cap re-checked
+  across a fragment; IPvFuture `v`/`V` at unit and full-record level;
+  B.7 item 17 signed-vector, nested public-key, revealed revocation-key,
+  and wire-level `f4` byte cases); comment fix in
+  `tests/test_verify_behavior.py`.
+- Documentation: this section; ambiguity 1 annotated as resolved;
+  `tools/python-model/README.md` updated to describe the v0.6 authorship
+  plus v0.7 maintenance and the renamed grammar.
+
+**Ambiguities found in the v0.7 delta.**  None new.  The delta's changed
+paragraphs are prescriptive and match the model's existing
+classifications (`schemaViolation` for boolean labels, including the
+signed B.7 item 17 vector, as the v0.6 review corrections already chose).
+
+**External material consulted for the v0.7 pass.**  None fetched.  The
+fragment ABNF (`fragment = *( pchar / "/" / "?" )`) comes from working
+knowledge of RFC 3986 (already listed above); RFC 5234's
+case-insensitivity rule is restated inside the v0.7 specification text
+itself.  No new dependencies were added; the model remains Python
+3.10 standard-library only.
+
+**Exclusion statement.**  No excluded or provisional Followee material
+was inspected, searched for, received, or supplied during this pass: no
+`followee-rs` source, tests, documentation, issues, CI output, or
+history; no whitepaper; no `IMPLEMENTATION.md`, `SPEC-QUESTIONS.md`, or
+`tools/spec_vector_check.py`; no implementation-status or provisional
+fixtures; no Rust-derived expected outputs; no reports from another
+implementation; and no GitHub or web searches for Followee material.
+The only inputs were this repository at commit `6b944b9` (including its
+own Git history) and the two approved files verified by SHA-256 above.
+
 ## Reproduction confidence
 
-All 160 unit tests pass (155 at freeze plus the post-freeze regression
-tests), including byte-exact independent reproduction of
+All 173 unit tests pass (155 at the v0.6 freeze, plus 5 post-freeze
+regression tests, plus 13 v0.7 conformance and regression tests), including byte-exact independent reproduction of
 every Appendix B value from seeds and structured inputs, the three
 identity-binding permutations of B.7 item 1, the B.7 mutation list with
 its normative error assignments, and the B.8 descriptor-substitution

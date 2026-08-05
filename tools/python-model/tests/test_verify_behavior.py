@@ -76,7 +76,7 @@ class ContactRuleTests(unittest.TestCase):
 
     def test_service_type_token_case_sensitive(self):
         entry = {0: "svc", 1: "feed", 2: "https://example.com/"}
-        # "feed" is not a token and not an absolute URI.
+        # "feed" is not a token and not an RFC 3986 URI.
         self.assert_schema_violation({4: [entry]})
         entry[1] = "Feed"
         self.accept({4: [entry]})
