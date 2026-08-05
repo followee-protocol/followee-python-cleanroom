@@ -40,7 +40,9 @@ _IPV6 = "|".join(
         f"(?:(?:{_H16}:){{0,6}}{_H16})?::",
     ]
 )
-_IPVFUTURE = f"v[{_HEXDIG}]+\\.(?:{_UNRESERVED}|{_SUB_DELIMS}|:)+"
+# RFC ABNF string literals are case-insensitive: IPvFuture's "v" matches
+# both cases.
+_IPVFUTURE = f"[vV][{_HEXDIG}]+\\.(?:{_UNRESERVED}|{_SUB_DELIMS}|:)+"
 _IP_LITERAL = f"\\[(?:{_IPV6}|{_IPVFUTURE})\\]"
 _REG_NAME = f"(?:{_UNRESERVED}|{_PCT}|{_SUB_DELIMS})*"
 _HOST = f"(?:{_IP_LITERAL}|{_IPV4}|{_REG_NAME})"

@@ -274,6 +274,76 @@ class AuthorityAndKeyMutations(MutationTestCase):
         )
 
 
+class BooleanLabelMutations(MutationTestCase):
+    """Post-freeze review finding 1: CBOR maps keyed by false/true must not
+    satisfy fixed-integer-label schemas via Python's False == 0 / True == 1
+    aliasing.  The test dicts avoid the aliased integer key so that the
+    boolean key survives Python dict construction."""
+
+    def test_public_key_boolean_labels_rejected(self):
+        key_bytes = helpers.ROOT_PUBLIC
+        for bad in ({False: -19, 1: key_bytes}, {0: -19, True: key_bytes}):
+            with self.assertRaises(FolloweeError) as ctx:
+                descriptor.validate_public_key(bad)
+            self.assertEqual(ctx.exception.code, ErrorCode.SCHEMA_VIOLATION)
+
+    def test_descriptor_boolean_labels_rejected(self):
+        pk = descriptor.make_public_key(helpers.ROOT_PUBLIC)
+        commitment = helpers.DESCRIPTOR[2]
+        for bad in (
+            {False: 1, 1: pk, 2: commitment},
+            {0: 1, True: pk, 2: commitment},
+        ):
+            with self.assertRaises(FolloweeError) as ctx:
+                descriptor.validate_descriptor(bad)
+            self.assertEqual(ctx.exception.code, ErrorCode.SCHEMA_VIOLATION)
+
+    def test_boolean_descriptor_label_envelope_rejected(self):
+        # Complete, descriptor-bound, correctly signed envelope whose
+        # Authority Descriptor uses false instead of label 0.  Encoded key
+        # order (01, 02, f4) is deterministic, so the decoder accepts the
+        # bytes; the schema check must reject them.
+        desc = {
+            False: 1,
+            1: descriptor.make_public_key(helpers.ROOT_PUBLIC),
+            2: helpers.DESCRIPTOR[2],
+        }
+        target = descriptor.did_for_descriptor(desc)
+        envelope = sign_body(root_body(did=target, descriptor_obj=desc))
+        # The signature over these exact bytes is genuinely valid...
+        parsed = cose.parse_envelope(envelope)
+        self.assertTrue(
+            ed25519.verify_strict(
+                helpers.ROOT_PUBLIC,
+                cose.sig_structure(parsed.payload),
+                parsed.signature,
+            )
+        )
+        # ...and the record must still be rejected at the descriptor schema.
+        self.assert_rejected(
+            envelope, ErrorCode.SCHEMA_VIOLATION, target=target
+        )
+
+    def test_boolean_public_key_label_envelope_rejected(self):
+        desc = {
+            0: 1,
+            1: {False: -19, 1: helpers.ROOT_PUBLIC},
+            2: helpers.DESCRIPTOR[2],
+        }
+        target = descriptor.did_for_descriptor(desc)
+        envelope = sign_body(root_body(did=target, descriptor_obj=desc))
+        self.assert_rejected(
+            envelope, ErrorCode.SCHEMA_VIOLATION, target=target
+        )
+
+    def test_boolean_protected_header_key_is_schema_violation(self):
+        # {true: -8} is not {1: <int>}: it must classify as schemaViolation,
+        # not unsupportedSuite.
+        payload = detcbor.encode(root_body())
+        envelope = raw_envelope(payload, protected=detcbor.encode({True: -8}))
+        self.assert_rejected(envelope, ErrorCode.SCHEMA_VIOLATION)
+
+
 class AggregateLimitMutations(MutationTestCase):
     """B.7 item 16: aggregate hard limits."""
 

@@ -147,9 +147,41 @@ clean-room procedure.  Numbers refer to the specification.
 25. **Service `type` URI length.**  The generic 2,048-byte "any URI" cap
     applies to URI-form service types; no tighter bound is stated.
 
+## Post-freeze clean-room review corrections (2026-08-05)
+
+An independent review of the freeze revision (`7ca1f62`), derived solely
+from the approved specification and the frozen Python source, reported two
+defects.  No Rust source, fixtures, outputs, or other excluded or
+provisional Followee material was revealed to or inspected by this session
+in receiving or fixing them.
+
+1. **Boolean CBOR labels versus fixed integer labels.**  Python evaluates
+   `False == 0` and `True == 1`, so the set-equality label checks in
+   `descriptor.validate_public_key()` and `descriptor.validate_descriptor()`
+   accepted deterministic CBOR maps keyed by `false`/`true` in place of the
+   required uint labels — including a complete, descriptor-bound, correctly
+   signed envelope.  Fixed by requiring `type(label) is int` for every
+   label before the set comparison.  Audit of the other fixed-label map
+   checks: `record.py` (body, contact, service, migration, extension-object
+   labels) already enforced exact label types; `cose._classify_protected`
+   had the same aliasing flaw in its *classification* branch only (a
+   boolean-keyed protected header was rejected either way but as
+   `unsupportedSuite` rather than `schemaViolation`) and was corrected;
+   `parse_envelope`'s empty-unprotected comparison and all value-position
+   checks were already exact-type safe.  Regression tests cover `false` and
+   `true` substitutions in both maps at unit level and a fully signed,
+   descriptor-bound envelope with a boolean descriptor label, asserted to
+   fail with `schemaViolation` while its Ed25519 signature verifies.
+2. **IPvFuture case-insensitivity (RFC 3986).**  RFC ABNF string literals
+   are case-insensitive, so IPvFuture's `"v"` must match `v` and `V`; the
+   URI grammar previously accepted only lowercase.  Fixed to `[vV]` with
+   positive tests for both forms.  The recorded `absolute-URI`/fragment
+   interpretation (ambiguity 1 above) is deliberately unchanged.
+
 ## Reproduction confidence
 
-All 155 unit tests pass, including byte-exact independent reproduction of
+All 160 unit tests pass (155 at freeze plus the post-freeze regression
+tests), including byte-exact independent reproduction of
 every Appendix B value from seeds and structured inputs, the three
 identity-binding permutations of B.7 item 1, the B.7 mutation list with
 its normative error assignments, and the B.8 descriptor-substitution

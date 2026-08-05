@@ -18,6 +18,17 @@ def _schema(message: str) -> FolloweeError:
     return FolloweeError(ErrorCode.SCHEMA_VIOLATION, message)
 
 
+def _require_int_labels(obj: dict, context: str) -> None:
+    """Every fixed-label map key must have exact type int.
+
+    Python treats False == 0 and True == 1, so a set comparison alone would
+    let deterministic CBOR maps keyed by booleans satisfy the label checks.
+    """
+    for label in obj:
+        if type(label) is not int:
+            raise _schema(f"{context} labels must be unsigned integers")
+
+
 def make_public_key(public_key: bytes) -> dict:
     """Build the canonical v1 public-key object for 32 raw key bytes."""
     if len(public_key) != 32:
@@ -38,7 +49,10 @@ def validate_public_key(
     ``invalidRevocationKey`` for both per the Section 15.3 description
     "does not match the commitment or key profile").
     """
-    if not isinstance(obj, dict) or set(obj.keys()) != {0, 1}:
+    if not isinstance(obj, dict):
+        raise _schema("public-key object must be a map")
+    _require_int_labels(obj, "public-key")
+    if set(obj.keys()) != {0, 1}:
         raise _schema("public-key object must contain exactly labels 0 and 1")
     suite = obj[0]
     if type(suite) is not int:
@@ -58,7 +72,10 @@ def validate_descriptor(obj) -> tuple:
 
     Returns ``(root_public_key_bytes, revocation_commitment_bytes)``.
     """
-    if not isinstance(obj, dict) or set(obj.keys()) != {0, 1, 2}:
+    if not isinstance(obj, dict):
+        raise _schema("authority descriptor must be a map")
+    _require_int_labels(obj, "authority descriptor")
+    if set(obj.keys()) != {0, 1, 2}:
         raise _schema("authority descriptor must contain exactly labels 0, 1, 2")
     version = obj[0]
     if type(version) is not int or version != 1:

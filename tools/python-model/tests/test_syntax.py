@@ -15,6 +15,8 @@ class AbsoluteUriTests(unittest.TestCase):
             "urn:example:animal:ferret:nose",
             "https://user:pw@example.com:8443/a/b?x=1&y=%20z",
             "https://[2001:db8::1]/path",
+            "https://[v7.ab:12]/x",  # IPvFuture, lowercase v
+            "https://[V7.ab]/x",  # IPvFuture, uppercase V (ABNF literals)
             "https://192.0.2.7:80/x",
             "scheme+ext.x-1:",
             "https://example.com/a%2Fb",

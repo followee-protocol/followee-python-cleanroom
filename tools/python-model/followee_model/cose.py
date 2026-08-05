@@ -72,6 +72,9 @@ def _classify_protected(protected) -> None:
         raise _schema("protected header is not a deterministic CBOR map") from None
     if (
         isinstance(header, dict)
+        # Exact type check first: True == 1 in Python, so a boolean-keyed
+        # map would otherwise satisfy the set comparison.
+        and all(type(label) is int for label in header)
         and set(header.keys()) == {1}
         and type(header[1]) is int
         and header[1] != SUITE_ED25519
