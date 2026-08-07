@@ -62,11 +62,17 @@ def verify_full_record(
             f"envelope is {len(envelope_bytes)} bytes, cap {MAX_RECORD_BYTES}",
         )
 
-    # Steps 2-3: exactly one tagged COSE Sign1 object with the exact profile.
+    # Steps 2-3: exactly one tagged COSE Sign1 object with the exact
+    # profile, under the Section 6.1 well-formedness, basic-validity, and
+    # deterministic-profile classifications.  The payload byte string is
+    # opaque at this layer (Section 6.1.1): its contents are a separate
+    # CBOR item validated in step 4.
     envelope = cose.parse_envelope(envelope_bytes)
 
-    # Step 4: one deterministic record-body item, no trailing bytes.  The
-    # record-body depth and aggregate member limits apply here.
+    # Step 4: one basically valid, deterministic record-body item, no
+    # trailing bytes.  Section 6.1 is enforced recursively, including
+    # inside unknown extension values.  The record-body depth and
+    # aggregate member limits apply here.
     body = detcbor.decode(
         envelope.payload,
         max_depth=record.MAX_RECORD_BODY_DEPTH,

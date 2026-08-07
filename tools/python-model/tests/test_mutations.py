@@ -145,7 +145,10 @@ class CoseProfileMutations(MutationTestCase):
 
 class NonDeterministicBodyMutations(MutationTestCase):
     """B.7 items 7-9: a valid signature over the mutated bytes must not
-    rescue a non-deterministic body."""
+    rescue a non-deterministic or basically invalid body."""
+
+    def payload_bytes(self) -> bytes:
+        return detcbor.encode(root_body())
 
     def test_non_minimal_integer_encoding(self):
         entries = root_body_raw_entries()
@@ -163,11 +166,84 @@ class NonDeterministicBodyMutations(MutationTestCase):
         envelope = sign_body_bytes(raw_map(swapped))
         self.assert_rejected(envelope, ErrorCode.NON_DETERMINISTIC_CBOR)
 
-    def test_duplicate_map_key(self):
+    def test_duplicate_map_key_adjacent(self):
+        # B.7 item 9, fault isolated: adjacent byte-identical keys violate
+        # only Section 6.1.1 basic validity -> invalidCbor (B.10).
+        entries = root_body_raw_entries()
+        duplicated = entries + [entries[-1]]
+        envelope = sign_body_bytes(raw_map(duplicated))
+        self.assert_rejected(envelope, ErrorCode.INVALID_CBOR)
+
+    def test_duplicate_map_key_out_of_order(self):
+        # B.7 item 9 with an additional map-order fault: the duplicated
+        # first key lands after greater keys, so the input independently
+        # violates Sections 6.1.1 and 6.1.2 and its exact error is
+        # unspecified (Section 6.1.3).
         entries = root_body_raw_entries()
         duplicated = entries + [entries[0]]
         envelope = sign_body_bytes(raw_map(duplicated))
-        self.assert_rejected(envelope, ErrorCode.NON_DETERMINISTIC_CBOR)
+        with self.assertRaises(FolloweeError) as ctx:
+            verify.verify_full_record(DID, envelope, NOW_MS)
+        self.assertIn(
+            ctx.exception.code,
+            (ErrorCode.INVALID_CBOR, ErrorCode.NON_DETERMINISTIC_CBOR),
+        )
+
+    def test_duplicate_key_in_unprotected_header(self):
+        # B.7 item 9 built by replacing the required empty unprotected
+        # header with a duplicate-keyed map: multiple independent faults
+        # (Section 6.1.1 basic validity and Section 6.2 rule 4), so the
+        # exact error is unspecified.
+        unprotected = raw_map(
+            [
+                (detcbor.encode(0), detcbor.encode(0)),
+                (detcbor.encode(0), detcbor.encode(1)),
+            ]
+        )
+        envelope = raw_envelope(self.payload_bytes(), unprotected=unprotected)
+        with self.assertRaises(FolloweeError) as ctx:
+            verify.verify_full_record(DID, envelope, NOW_MS)
+        self.assertIn(
+            ctx.exception.code,
+            (ErrorCode.INVALID_CBOR, ErrorCode.SCHEMA_VIOLATION),
+        )
+
+
+class InvalidUtf8BodyMutations(MutationTestCase):
+    """B.7 item 18: invalid RFC 3629 UTF-8 text strings, re-signed by the
+    legitimate key so that invalidCbor is the only fault (B.10 pattern:
+    the invalid text is an extension *value* under an otherwise valid
+    extension key)."""
+
+    EXTENSION_KEY = "https://example.com/ext"
+
+    def envelope_with_extension_value(self, value_bytes: bytes) -> bytes:
+        entries = root_body_raw_entries()
+        key_bytes = detcbor.encode(self.EXTENSION_KEY)
+        extension_map = raw_map([(key_bytes, value_bytes)])
+        body = raw_map(entries + [(detcbor.encode(8), extension_map)])
+        return sign_body_bytes(body)
+
+    def test_invalid_utf8_extension_values(self):
+        cases = {
+            "overlong U+002E": bytes.fromhex("62c0ae"),
+            "lone U+D800 surrogate": bytes.fromhex("63eda080"),
+            "U+110000 above RFC 3629 maximum": bytes.fromhex("64f4908080"),
+            "incomplete three-byte code point": bytes.fromhex("62e282"),
+        }
+        for name, value_bytes in cases.items():
+            with self.subTest(name):
+                envelope = self.envelope_with_extension_value(value_bytes)
+                self.assert_rejected(envelope, ErrorCode.INVALID_CBOR)
+
+    def test_valid_utf8_extension_value_accepted(self):
+        # Control: the same construction with valid UTF-8 verifies, which
+        # demonstrates the re-signatures above are genuine.
+        envelope = self.envelope_with_extension_value(
+            detcbor.encode("☃")
+        )
+        record = verify.verify_full_record(DID, envelope, NOW_MS)
+        self.assertEqual(record.extensions[self.EXTENSION_KEY], "☃")
 
 
 class AuthorityAndKeyMutations(MutationTestCase):

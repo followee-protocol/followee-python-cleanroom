@@ -1,31 +1,45 @@
 """Deterministic CBOR encoder and strict decoder.
 
-Implements RFC 8949 CBOR restricted to the Followee deterministic profile
-(Followee-Specification.md Section 6.1):
+Implements RFC 8949 CBOR under the three successive validation layers of
+Followee-Specification.md Section 6.1:
 
-1. definite lengths only;
-2. shortest permitted encodings for integers, lengths, and tags;
-3. map entries ordered by bytewise lexicographic order of encoded keys;
-4. duplicate map keys forbidden;
-5. floating-point values, ``undefined``, and tags forbidden;
-6. (the outer COSE tag 18 is handled by the envelope parser, not here);
-7. bignum tags forbidden (all integers fit CBOR major types 0 and 1);
-8. text strings must be valid UTF-8, no normalization;
-9. non-deterministic encodings are rejected, never normalized.
+1. *Well-formedness and basic validity* (Section 6.1.1): exactly one
+   well-formed CBOR data item; every map has unique keys under generic
+   data-model value equivalence; every text string is valid RFC 3629
+   UTF-8, checked recursively through arrays and maps.  Recursion stops
+   at byte-string boundaries: byte-string contents are opaque and are
+   never reinterpreted as CBOR by this decoder.
+2. *Followee deterministic profile* (Section 6.1.2): definite lengths
+   only; shortest permitted encodings for integers, lengths, and tags;
+   map entries in bytewise lexicographic order of their encoded keys;
+   floating-point values, ``undefined``, and tags (including bignum tags)
+   forbidden.  (The required outer COSE tag 18 is handled by the envelope
+   parser, not here.)
+3. *Schema* (Section 6.1.3): the depth and member limits passed by the
+   caller, plus key forms no Followee schema admits.
 
 The decoder verifies exactly the received bytes: a successfully decoded value
 re-encodes to the identical byte string via :func:`encode`.
 
-Error classification (Section 15.3):
+Error classification (Sections 6.1 and 15.3):
 
-* structurally ill-formed input (truncation, reserved values, trailing
-  bytes, unexpected break) -> ``invalidCbor``;
-* well-formed but non-deterministic or profile-forbidden encodings
+* not well-formed (truncation, reserved values, trailing bytes, unexpected
+  break), or well-formed but basically invalid (duplicate map keys, invalid
+  UTF-8 text) -> ``invalidCbor``;
+* basically valid but non-deterministic or profile-forbidden encodings
   (non-minimal encodings, indefinite lengths, floats, undefined, tags,
-  unordered or duplicate map keys, invalid UTF-8) -> ``nonDeterministicCbor``;
-* depth or member limits exceeded, or a map key form the Followee schemas can
-  never admit (container keys, or distinct CBOR keys that would collide in the
-  decoded representation such as ``true`` versus ``1``) -> ``schemaViolation``.
+  unordered map keys) -> ``nonDeterministicCbor``;
+* depth or member limits exceeded, unassigned simple values, or a map key
+  form the Followee schemas can never admit (container keys, or distinct
+  CBOR keys that would collide in the decoded representation such as
+  ``true`` versus ``1``) -> ``schemaViolation``.
+
+The decoder enforces the deterministic profile while parsing, so a
+value-equal duplicate key with a non-minimal second serialization (for
+example ``00`` then ``1800``) is a multi-fault input; Section 6.1.3 leaves
+its exact error unspecified, and this decoder reports the encoding fault it
+meets first.  The fault-isolated adjacent-duplicate case of Appendix B.10
+has byte-identical keys and is always classified ``invalidCbor``.
 
 Decoded values use plain Python types: int, bytes, str, bool, None, list,
 dict.  Booleans are distinct from integers in both directions.
@@ -120,9 +134,13 @@ class _Decoder:
             raw = self.data[self.pos : self.pos + arg]
             self.pos += arg
             try:
+                # Python's strict UTF-8 decoder implements RFC 3629: it
+                # rejects overlong encodings, surrogate code points, values
+                # above U+10FFFF, and incomplete code-point sequences.
                 return raw.decode("utf-8", errors="strict")
             except UnicodeDecodeError:
-                raise _nondet("text string is not valid UTF-8") from None
+                # Basic-validity failure (Section 6.1.1).
+                raise _invalid("text string is not valid UTF-8") from None
         if major == 4:
             if depth > self.max_depth:
                 raise _schema(f"nesting depth limit exceeded ({self.max_depth})")
@@ -143,7 +161,10 @@ class _Decoder:
                 key_bytes = self.data[key_start : self.pos]
                 if previous_key_bytes is not None:
                     if key_bytes == previous_key_bytes:
-                        raise _nondet("duplicate map key")
+                        # Basic-validity failure (Section 6.1.1): after the
+                        # deterministic checks, byte equality is exactly
+                        # generic data-model key equivalence.
+                        raise _invalid("duplicate map key")
                     if key_bytes < previous_key_bytes:
                         raise _nondet("map keys not in bytewise lexicographic order")
                 previous_key_bytes = key_bytes
@@ -151,7 +172,10 @@ class _Decoder:
                     raise _schema("container map key is not admitted by any v1 schema")
                 if key in result:
                     # Distinct CBOR keys that collide as Python dict keys
-                    # (e.g. true vs 1).  No v1 schema admits such key pairs.
+                    # (e.g. true vs 1).  Section 6.1.1: values of different
+                    # generic data-model types are *not* equivalent keys, so
+                    # this is not a basic-validity duplicate; no v1 schema
+                    # admits such key pairs.
                     raise _schema("map keys collide in decoded representation")
                 result[key] = self.decode_item(depth + 1)
             return result
@@ -168,14 +192,16 @@ class _Decoder:
         if ai == 23:
             raise _nondet("CBOR 'undefined' is forbidden")
         if ai < 20:
-            raise _nondet("unassigned CBOR simple value")
+            # Well-formed and basically valid; not forbidden by the
+            # Section 6.1.2 profile list; no v1 schema admits it.
+            raise _schema("unassigned CBOR simple value")
         if ai == 24:
             self._need(1)
             value = self.data[self.pos]
             self.pos += 1
             if value < 32:
                 raise _invalid("ill-formed two-byte simple value")
-            raise _nondet("unassigned CBOR simple value")
+            raise _schema("unassigned CBOR simple value")
         if ai in (25, 26, 27):
             raise _nondet("floating-point values are forbidden")
         if ai == 31:

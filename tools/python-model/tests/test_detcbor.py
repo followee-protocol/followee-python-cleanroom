@@ -111,8 +111,10 @@ class DecodeStrictnessTests(unittest.TestCase):
             self.assert_code(data_hex, ErrorCode.NON_DETERMINISTIC_CBOR)
 
     def test_unassigned_simple_values(self):
-        self.assert_code("f0", ErrorCode.NON_DETERMINISTIC_CBOR)  # simple(16)
-        self.assert_code("f820", ErrorCode.NON_DETERMINISTIC_CBOR)  # simple(32)
+        # Well-formed and basically valid; not in the Section 6.1.2 profile
+        # list; rejected at the schema layer (Section 6.1.3 fallback).
+        self.assert_code("f0", ErrorCode.SCHEMA_VIOLATION)  # simple(16)
+        self.assert_code("f820", ErrorCode.SCHEMA_VIOLATION)  # simple(32)
         self.assert_code("f800", ErrorCode.INVALID_CBOR)  # ill-formed two-byte
 
     def test_tags_rejected(self):
@@ -124,20 +126,65 @@ class DecodeStrictnessTests(unittest.TestCase):
         self.assert_code("a201000001", ErrorCode.NON_DETERMINISTIC_CBOR)
 
     def test_duplicate_map_keys(self):
-        self.assert_code("a200000001", ErrorCode.NON_DETERMINISTIC_CBOR)
+        # Basic-validity failure (Section 6.1.1): adjacent byte-identical
+        # keys are equivalent values and classify as invalidCbor.
+        self.assert_code("a200000001", ErrorCode.INVALID_CBOR)
+
+    def test_duplicate_map_keys_nested(self):
+        # Section 6.1.1 is recursive through arrays and maps.
+        self.assert_code("81a200000001", ErrorCode.INVALID_CBOR)
+        self.assert_code("a100a200000001", ErrorCode.INVALID_CBOR)
+
+    def test_value_equivalent_duplicate_keys_multi_fault(self):
+        # 0 encoded as 00 then as 1800: both a Section 6.1.1 duplicate and a
+        # Section 6.1.2 non-minimal encoding.  Section 6.1.3 leaves the exact
+        # error unspecified; the model must reject with either code.
+        with self.assertRaises(FolloweeError) as ctx:
+            dec("a20000180001")
+        self.assertIn(
+            ctx.exception.code,
+            (ErrorCode.INVALID_CBOR, ErrorCode.NON_DETERMINISTIC_CBOR),
+        )
 
     def test_python_key_collision(self):
-        # Distinct CBOR keys 1 and true collide as Python keys.
+        # Distinct CBOR keys 1 and true collide as Python keys.  Values of
+        # different generic data-model types are not equivalent keys
+        # (Section 6.1.1), so this is a schema rejection, not invalidCbor.
         self.assert_code("a20100f501", ErrorCode.SCHEMA_VIOLATION)
 
     def test_container_map_key(self):
         self.assert_code("a1800101", ErrorCode.SCHEMA_VIOLATION)
 
     def test_invalid_utf8(self):
-        self.assert_code("61ff", ErrorCode.NON_DETERMINISTIC_CBOR)
-        self.assert_code("62c328", ErrorCode.NON_DETERMINISTIC_CBOR)
+        # Basic-validity failures (Sections 6.1.1 and 15.3): invalidCbor.
+        self.assert_code("61ff", ErrorCode.INVALID_CBOR)
+        self.assert_code("62c328", ErrorCode.INVALID_CBOR)
         # UTF-16 surrogate half encoded as UTF-8 is invalid.
-        self.assert_code("63eda080", ErrorCode.NON_DETERMINISTIC_CBOR)
+        self.assert_code("63eda080", ErrorCode.INVALID_CBOR)
+
+    def test_invalid_utf8_rfc3629_classes(self):
+        # The four RFC 3629 classes named by Section 6.1.1 and B.7 item 18.
+        self.assert_code("62c0ae", ErrorCode.INVALID_CBOR)  # overlong U+002E
+        self.assert_code("63eda080", ErrorCode.INVALID_CBOR)  # lone surrogate
+        self.assert_code("64f4908080", ErrorCode.INVALID_CBOR)  # U+110000
+        # Complete two-byte text string holding an incomplete three-byte
+        # code point (head 62, bytes e2 82): well-formed CBOR, invalid UTF-8.
+        self.assert_code("62e282", ErrorCode.INVALID_CBOR)
+
+    def test_invalid_utf8_recursive_in_ignored_positions(self):
+        # Recursion applies even where the field would be ignored: an
+        # invalid text value nested in an array and as a map value.
+        self.assert_code("8162c0ae", ErrorCode.INVALID_CBOR)
+        self.assert_code("a10062c0ae", ErrorCode.INVALID_CBOR)
+
+    def test_byte_string_contents_opaque(self):
+        # Recursion stops at byte-string boundaries (Section 6.1.1): bytes
+        # that happen to contain invalid-UTF-8 text-string CBOR, a
+        # duplicate-key map, or a float are opaque and acceptable.
+        for inner_hex in ("61ff", "a200000001", "f90000"):
+            inner = bytes.fromhex(inner_hex)
+            encoded = detcbor.encode(inner)
+            self.assertEqual(dec(encoded.hex()), inner)
 
     def test_truncation(self):
         for data_hex in ("18", "19ff", "41", "62c3", "8100".replace("00", ""), "a1"):

@@ -76,10 +76,17 @@ clean-room procedure.  Numbers refer to the specification.
 6. **Invalid UTF-8 in a text string (6.1 item 8).**  Classified
    `nonDeterministicCbor` (a Section 6.1 profile violation), not
    `invalidCbor`.
+   *Resolved by specification v0.8*, which moves UTF-8 validity (and
+   duplicate map keys) into RFC 8949 basic validity and assigns
+   `invalidCbor`; see the v0.8 maintenance section below.
 7. **Unassigned CBOR simple values.**  Not mentioned by Section 6.1; no
    Followee schema admits them.  Well-formed unassigned simple values are
    rejected as `nonDeterministicCbor`; the ill-formed two-byte form with
    value < 32 is `invalidCbor` per RFC 8949.
+   *Revised under specification v0.8*: the layered classification places
+   well-formed unassigned simple values past Sections 6.1.1 and 6.1.2, so
+   they now classify as `schemaViolation`; see the v0.8 maintenance
+   section below.
 8. **Multihash varint bound (3.1).**  Unsigned varints are capped at
    9 bytes per the multiformats convention; longer varints produce
    `invalidDid` as structurally malformed.
@@ -279,11 +286,212 @@ implementation; and no GitHub or web searches for Followee material.
 The only inputs were this repository at commit `6b944b9` (including its
 own Git history) and the two approved files verified by SHA-256 above.
 
+## v0.8 maintenance pass (2026-08-07)
+
+Bounded maintenance pass under the updated `AUTHORING-CONSTRAINTS.md`,
+performed in a fresh session containing only the approved inputs.
+
+**Revisions.**
+- v0.7 base model: commit `a39138dae8072c7b89dc922bcfe6f5717312c6e6`
+  (`cleanroom-v0.7-maintenance-freeze`), verified before any change,
+  with the freeze tag still peeling to it.
+- v0.8 input-preparation commit:
+  `5d00c792a8d61f7080ad3f0ccf04642b2b491017`, based directly on the v0.7
+  freeze.
+- v0.7 specification input (retained at the repository root):
+  `followee-protocol/followee` commit
+  `abc9a55d90f1026e6509207abda73e5dc6d14241`, SHA-256
+  `2b264823ba68d9a7d69ce68de5c1408ac8a3d54ff6d726ab89ee2baa2707c81f`.
+- v0.8 specification input (`inputs/v0.8/Followee-Specification.md`):
+  `followee-protocol/followee` commit
+  `610f9a1e78d860e8bd685ef1435a53a16f1221ec`, SHA-256
+  `474f0b3880e838a5232890c3e2edc183c341fd25e28d7db0066ad109aa43113b`.
+- Pre-v0.8 Appendix B fixture unchanged (SHA-256
+  `f188316ffd7ad07fe94a842027f1ea7596e42a2f00b0691c1096fa2bfaddb717`).
+- Resulting model commit: recorded in Git as the sole child of the
+  input-preparation commit (this maintenance commit).
+
+The semantic delta was derived independently by reading both pinned
+specifications completely, then cross-checked with a mechanical `diff`
+of the two approved files inside this repository.  No summary,
+affected-section list, rationale, expected-change checklist, or other
+implementation was requested, received, or consulted.
+
+**Semantic differences identified (v0.7 → v0.8).**
+
+1. *Section 6.1 layered CBOR classification (normative behavior change
+   for this model).*  Section 6.1 is restructured into 6.1.1
+   (well-formedness and RFC 8949 basic validity: unique map keys under
+   generic data-model value equivalence, RFC 3629 UTF-8, both checked
+   recursively through arrays and maps and stopping at byte-string
+   boundaries), 6.1.2 (the deterministic/restricted profile), and 6.1.3
+   (schema, with `schemaViolation` as fallback).  Section 15.3 redefines
+   `invalidCbor` (code 4) to cover not-well-formed *and* basically
+   invalid input — including duplicate map keys and invalid UTF-8 — and
+   `nonDeterministicCbor` (code 5) to cover basically valid input that
+   violates Section 6.1.2.  Under v0.7 the model classified duplicate
+   keys and invalid UTF-8 as `nonDeterministicCbor` (former Section 6.1
+   rules 4 and 8; recorded interpretation 6).  **Code change:**
+   `detcbor.py` reclassifies byte-identical duplicate map keys and
+   invalid UTF-8 text strings to `invalidCbor`.
+2. *Section 6.1.3 multi-fault rule (new normative flexibility).*  When
+   one input independently violates more than one rule, the exact error
+   is unspecified unless a normative rule or vector assigns precedence;
+   exact error assertions require fault-isolated inputs.  Consequences
+   adopted: a value-equal duplicate key whose second serialization is
+   non-minimal (`00` then `1800`) is multi-fault and the model reports
+   the fault met first while tests accept either code; the B.7 item 9
+   duplicate-unprotected-header construction is likewise multi-fault
+   per the new B.7 note.  **Tests updated accordingly.**
+3. *Unassigned CBOR simple values (classification consequence).*  The
+   v0.8 layering leaves well-formed unassigned simple values outside
+   both 6.1.1 and the 6.1.2 forbidden list (floats, `undefined`, tags),
+   so they fall through to the schema layer.  **Code change:**
+   reclassified from `nonDeterministicCbor` to `schemaViolation`
+   (revising recorded interpretation 7).  The ill-formed two-byte form
+   below 32 remains `invalidCbor`.
+4. *Section 6.1.1 key-equivalence boundaries (codifies existing
+   behavior).*  Different serializations of one value are one key;
+   values of different generic data-model types (`0` versus `false`)
+   are *not* equivalent keys even if a host language compares them
+   equal.  The model already held both properties (bytewise duplicate
+   detection plus the v0.6-review exact-type label checks); the
+   `true`-versus-`1` decoded-representation collision remains
+   `schemaViolation` (interpretation 18), now explicitly supported by
+   6.1.1.  **Comments and tests only.**
+5. *Section 6.1.1 byte-string opacity (codifies existing behavior).*
+   Recursion stops at byte-string boundaries; byte-string contents are
+   never reinterpreted as CBOR by the enclosing decode.  The model's
+   decoder already treated byte strings as opaque, and the COSE payload
+   is decoded as a separate item in Section 8.1 step 4.  **Comments and
+   tests only.**
+6. *Section 8.1 steps 2 and 4 (editorial for this model).*  The steps
+   now name the Section 6.1 classifications and the recursive
+   enforcement inside unknown extension values; behavior follows from
+   changes 1-5.  **Comments only.**
+7. *Appendix B.7 items 18 and the item 9/17 notes.*  New required
+   mutation class: invalid RFC 3629 UTF-8 (overlong, surrogate, above
+   U+10FFFF, incomplete), re-signed by the legitimate key, with
+   fault-isolated vectors in B.10 producing `invalidCbor`.  **Tests
+   added** (`test_mutations.py` item 18 class; B.10 reproduction).
+8. *Appendix B.9 (new normative vectors).*  A second complete identity
+   (Bob: seeds, descriptor, DID
+   `did:flw:zQmdGJbJu6pBbiyZX9gJHBTFxnUCtBgRa7mZRcKKs1TcFEy`, timestamp
+   `1785589201123`, complete Root record) for cross-DID state isolation
+   and relay batches; migration vectors deferred to v0.8.1 by the
+   specification.  **Fixture and tests added**; all Bob values
+   reproduced byte-exactly from seeds and structured inputs.
+9. *Appendix B.10 (new normative vectors).*  Five fault-isolated
+   basic-validity records built from the B.4 body (`a6` → `a7` head,
+   appended label-8 extension with key `https://example.com/ext`),
+   re-signed with Alice's root seed: adjacent duplicate integer key,
+   overlong U+002E, lone U+D800, U+110000, and an incomplete three-byte
+   code point inside a complete two-byte text string.  All produce
+   `invalidCbor`; reporting `invalidSignature` indicates the received
+   bytes were altered.  **Fixture and tests added**; digests,
+   Sig_structure lengths, and signatures reproduced byte-exactly.
+10. *Relay-protocol changes (out of the model's scope).*  Sections 12.1,
+    12.3, 12.6, 13.3, 14.1, 15.4, 16.16, 20.2, 20.3, 20.4, the Appendix
+    A positional/`.cbor`-control notes, and the Appendix B.11 vectors
+    define outer-wrapper validation and HTTP 400 versus per-item
+    errors, duplicate-DID batch cardinality and positional isolation,
+    `itemLimit` overflow rejection, synchronization cursor progress
+    despite rejected candidates, and incremental-convergence liveness.
+    The model deliberately contains no relay wire protocol (scope:
+    Sections 3-8), so no code models these; recorded here for
+    completeness of the delta.  The B.11 vectors are therefore not
+    extracted into fixtures.
+11. *Section 7.5 wording (editorial).*  "absolute-URI-keyed" becomes
+    "Section 7.2 URI-keyed", harmonizing with Sections 5.6/7.2 as
+    already implemented by the v0.7 pass (extension keys validated with
+    `is_uri`).  **No change.**
+12. *Section 1.1, 15.3 table wording, Section 22 freeze list, Appendix
+    C reference 21 (RFC 3629), Section 20.1 additions.*  Status text,
+    the frozen "basic-validity classification ... byte-string opacity
+    boundary" items, and conformance-list entries corresponding to the
+    changes above.  **Documentation/tests only.**
+
+**Changes made.**
+
+- Code: `followee_model/detcbor.py` (duplicate map keys and invalid
+  UTF-8 reclassified `invalidCbor`; unassigned simple values
+  reclassified `schemaViolation`; docstring rewritten around the
+  Section 6.1 layers and multi-fault rule), `followee_model/verify.py`
+  (step 2/4 comments), `followee_model/__init__.py` (docstring
+  version).
+- Fixtures: new `fixtures/specification/appendix_b_v08.json`,
+  mechanically extracted by hand from Appendix B.9 and B.10 of the
+  pinned `inputs/v0.8/Followee-Specification.md` in this repository
+  (provenance block embedded in the file); the pre-v0.8
+  `appendix_b.json` is unchanged and remains valid because B.2-B.8 are
+  textually identical in v0.8.
+- Tests: `tests/test_detcbor.py` (reclassified expectations; new
+  nested-duplicate, RFC 3629 class, recursive-position, byte-string
+  opacity, and multi-fault cases), `tests/test_mutations.py`
+  (fault-isolated adjacent duplicate `invalidCbor`; out-of-order and
+  unprotected-header duplicates as multi-fault either-code; new B.7
+  item 18 class with valid-UTF-8 control), new
+  `tests/test_v08_conformance.py` (B.9 Bob reproduction and
+  verification, cross-DID identity-binding and selection isolation,
+  B.10 reproduction with exact `invalidCbor` assertions).
+- Documentation: this section; interpretation 6 marked resolved and 7
+  revised; `tools/python-model/README.md` updated.
+
+**Ambiguities found in the v0.8 delta.**
+
+1. *Multi-fault classification is deliberately unspecified* (Section
+   6.1.3), so it is recorded as adopted flexibility rather than an
+   ambiguity: the model reports the first fault its single-pass decoder
+   meets, and tests assert membership in the applicable error set.
+2. *Unassigned CBOR simple values* are still not named by any layer of
+   Section 6.1; the `schemaViolation` classification above follows from
+   the layering but is an inference, flagged as a possible symbolic
+   difference under Section 20.4's "symbolic differences permitted by
+   unspecified multi-fault precedence" reporting category.
+3. *`invalidCbor` versus `nonDeterministicCbor` for indefinite
+   lengths*: RFC 8949 treats indefinite-length items as well-formed,
+   and Section 6.1.2 rule 1 requires definite lengths, so the model
+   keeps `nonDeterministicCbor` for them; noted because rule 7's
+   "profile-forbidden encoding" phrasing could invite `invalidCbor`
+   readings elsewhere.
+
+**External material consulted for the v0.8 pass.**  None fetched over
+the network.  RFC 3629's invalid-UTF-8 classes (overlong, surrogates,
+above U+10FFFF, incomplete sequences) are restated inside the v0.8
+specification text itself; Python 3.10's strict `bytes.decode("utf-8")`
+was verified in-session to reject all four classes, so the existing
+standard-library decoder satisfies Section 6.1.1 (RFC 3629 added to the
+standards table's scope via this note; URL
+https://www.rfc-editor.org/rfc/rfc3629).  RFC 8949 Sections 5.3/5.6
+basic-validity definitions were applied from working knowledge (already
+listed in the standards table).  No new dependencies were added; the
+model remains Python 3.10 standard-library only.
+
+**Exclusion statement.**  No excluded or provisional Followee material
+was inspected, searched for, received, or supplied during this pass: no
+prose summary of the v0.7→v0.8 changes, affected-section list,
+amendment rationale, or expected-change checklist; no `followee-rs`
+source, tests, documentation, issues, CI output, diffs, or history; no
+whitepaper; no `IMPLEMENTATION.md`, `SPEC-QUESTIONS.md`,
+conformance-interface material, or `tools/spec_vector_check.py`; no
+implementation-status or provisional fixtures; no Rust-derived expected
+outputs; no baseline archives, promotion proposals, or mutation,
+fuzzing, coverage, conformance, interoperability, or differential
+reports; and no GitHub or web searches for Followee material.  The only
+inputs were this repository at commit `5d00c79` (including its own Git
+history) and the three approved files verified by SHA-256 against
+`AUTHORING-CONSTRAINTS.md` before any change.
+
 ## Reproduction confidence
 
-All 173 unit tests pass (155 at the v0.6 freeze, plus 5 post-freeze
-regression tests, plus 13 v0.7 conformance and regression tests), including byte-exact independent reproduction of
-every Appendix B value from seeds and structured inputs, the three
-identity-binding permutations of B.7 item 1, the B.7 mutation list with
-its normative error assignments, and the B.8 descriptor-substitution
-attack (signature valid, rejected `identityBindingMismatch` at step 9).
+All 193 unit tests pass (155 at the v0.6 freeze, plus 5 post-freeze
+regression tests, plus 13 v0.7 conformance and regression tests, plus
+20 v0.8 conformance, mutation, and decoder-classification tests),
+including byte-exact independent reproduction of
+every Appendix B value from seeds and structured inputs — now including
+the v0.8 B.9 Bob identity and all five B.10 fault-isolated
+basic-validity vectors (bodies, digests, Sig_structure lengths,
+signatures) — the three identity-binding permutations of B.7 item 1,
+the B.7 mutation list with its normative error assignments including
+the new item 18 class, and the B.8 descriptor-substitution attack
+(signature valid, rejected `identityBindingMismatch` at step 9).
