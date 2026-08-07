@@ -444,10 +444,16 @@ implementation was requested, received, or consulted.
    ambiguity: the model reports the first fault its single-pass decoder
    meets, and tests assert membership in the applicable error set.
 2. *Unassigned CBOR simple values* are still not named by any layer of
-   Section 6.1; the `schemaViolation` classification above follows from
-   the layering but is an inference, flagged as a possible symbolic
-   difference under Section 20.4's "symbolic differences permitted by
-   unspecified multi-fault precedence" reporting category.
+   Section 6.1.  `schemaViolation` is this clean-room model's
+   independently derived interpretation, following from the layered
+   classification (such a value passes Sections 6.1.1 and 6.1.2 and is
+   admitted by no schema).  An unassigned simple value can be a
+   single-fault input, so Section 6.1.3's unspecified multi-fault
+   precedence does not apply to it.  If another implementation later
+   differs on a fault-isolated unassigned-simple-value case, that
+   disagreement must open a specification or implementation review
+   issue; it must not be treated as permitted multi-fault variation.
+   (Corrected wording; see the post-maintenance review note below.)
 3. *`invalidCbor` versus `nonDeterministicCbor` for indefinite
    lengths*: RFC 8949 treats indefinite-length items as well-formed,
    and Section 6.1.2 rule 1 requires definite lengths, so the model
@@ -481,6 +487,31 @@ reports; and no GitHub or web searches for Followee material.  The only
 inputs were this repository at commit `5d00c79` (including its own Git
 history) and the three approved files verified by SHA-256 against
 `AUTHORING-CONSTRAINTS.md` before any change.
+
+## Post-maintenance review note (2026-08-07)
+
+An independent review of the v0.8 maintenance commit
+`8a681abe854feea2a20e42b8f0980237fb27296a`, conducted using only the
+pinned v0.8 specification and this repository's published clean-room
+source, reported one documentation-only classification issue: ambiguity
+2 above originally described the unassigned-simple-value classification
+as a possible symbolic difference under Section 20.4's category for
+differences permitted by unspecified multi-fault precedence.  That
+category does not apply, because an unassigned simple value can be a
+single-fault input; Section 6.1.3's unspecified-precedence rule covers
+only inputs that independently violate more than one rule.  The
+ambiguity text was reworded to state that `schemaViolation` is the
+model's independently derived interpretation and that a future
+fault-isolated disagreement with another implementation must open a
+specification or implementation review issue rather than being recorded
+as permitted multi-fault variation.
+
+This correction changes wording only: no protocol code, test, fixture,
+or the derived interpretation itself was modified.  The correction was
+derived solely from the pinned v0.8 specification and the clean-room
+source; no excluded, provisional, Rust-derived, or differential
+material was inspected, searched for, or received in raising or
+applying it, and no GitHub or web search was performed.
 
 ## Reproduction confidence
 
