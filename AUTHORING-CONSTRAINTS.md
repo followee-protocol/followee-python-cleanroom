@@ -5,11 +5,11 @@ the Followee protocol core. Its purpose is to detect interpretations or
 mistakes shared by the Rust implementation and its tests.
 
 The model was independently authored against specification v0.6, corrected
-under post-freeze review, and maintained to specification v0.7 without
-receiving excluded Followee material. This document now governs the bounded
-maintenance pass from v0.7 to v0.8. That pass preserves independence from the
-Rust implementation, but it is not represented as fresh authorship from a
-blank workspace.
+under post-freeze review, and independently maintained through specification
+v0.8 without receiving excluded Followee material. This document preserves
+that lineage and now governs the bounded maintenance pass from v0.8 to v0.8.1.
+The pass preserves independence from the Rust implementation, but it is not
+represented as fresh authorship from a blank workspace.
 
 ## Preserved v0.6 baseline
 
@@ -123,7 +123,7 @@ The reviewed v0.7 model is frozen at:
 The freeze above and every earlier tag and commit named by this document MUST
 NOT be moved, rewritten, squashed, or deleted.
 
-## Approved v0.8 maintenance inputs
+## Approved v0.8 maintenance inputs (historical)
 
 Only the following Followee-specific material may be used during the v0.8
 maintenance pass:
@@ -141,7 +141,7 @@ Its presence does not authorise access to its source repository. New
 specification-status inputs may be derived directly from the pinned v0.8
 document within this repository, with their derivation recorded.
 
-## Excluded material during v0.8 maintenance
+## Excluded material during v0.8 maintenance (historical)
 
 Until the reviewed v0.8 maintenance revision is committed and frozen, the
 maintenance session MUST NOT inspect, search for, or receive:
@@ -171,7 +171,7 @@ The maintenance session MUST NOT search GitHub or the public web for
 additional Followee material. It may use this repository's own Git history
 because that history is itself an approved input.
 
-## v0.8 maintenance procedure
+## v0.8 maintenance procedure (historical)
 
 The maintenance pass is performed in a fresh conversation or another context
 containing only the approved inputs above. It shares no protocol code,
@@ -202,6 +202,108 @@ That commit is reviewed and frozen under a new immutable v0.8 maintenance tag
 before any excluded, provisional, Rust-derived, or differential material is
 revealed. The record MUST identify the v0.7 base, both specification commits
 and digests, the input-preparation commit, and the resulting model commit.
+
+After that freeze, the differential harness may supply provisional input bytes
+to the unchanged model. Expected results remain comparator-side and MUST NOT
+be supplied to the adapter or model. Agreement or disagreement is recorded by
+the harness; it is not resolved by silently changing the frozen model.
+
+## Preserved v0.8 maintenance freeze
+
+The reviewed v0.8 model is frozen through the following immutable lineage:
+
+| Artefact | Revision |
+| --- | --- |
+| v0.8 maintenance input | `5d00c792a8d61f7080ad3f0ccf04642b2b491017` |
+| v0.8 maintenance implementation | `8a681abe854feea2a20e42b8f0980237fb27296a` |
+| Reviewed v0.8 maintenance freeze | `7be1b3c5f3000cadcd45637e3a96d7bb17ec2023` (`cleanroom-v0.8-maintenance-freeze`) |
+
+The final revision is a documentation-only correction whose parent is the
+maintenance implementation. The freeze tag MUST peel to the final revision.
+This freeze and every earlier tag and commit named by this document MUST NOT
+be moved, rewritten, squashed, or deleted.
+
+## Approved v0.8.1 maintenance inputs
+
+Only the following Followee-specific material may be used during the v0.8.1
+maintenance pass:
+
+| Input | Revision or digest | Status |
+| --- | --- | --- |
+| This clean-room repository's own source, tests, records, fixtures, and Git history | through commit `7be1b3c5f3000cadcd45637e3a96d7bb17ec2023` | Reviewed independent model maintained through v0.8 |
+| `inputs/v0.8/Followee-Specification.md` | `followee-protocol/followee` commit `610f9a1e78d860e8bd685ef1435a53a16f1221ec`; SHA-256 `474f0b3880e838a5232890c3e2edc183c341fd25e28d7db0066ad109aa43113b` | Normative specification v0.8 |
+| `inputs/v0.8.1/Followee-Specification.md` | `followee-protocol/followee` commit `2d5292e95af022af7beee2d154e7217e29907960`; SHA-256 `ad9895d1672e3f4f68dac9e2a92c1d04fb63229c406e67dc1041a5971a361b7d` | Normative specification v0.8.1 |
+
+The normative v0.8.1 specification governs. Existing fixture files are part
+of this clean-room repository's own reviewed history but do not supersede the
+specification. New specification-status inputs may be derived directly from
+the pinned v0.8.1 document within this repository, with their derivation
+recorded. No fixture or expected output may be imported from another Followee
+implementation or from the conformance harness.
+
+## Excluded material during v0.8.1 maintenance
+
+Until the reviewed v0.8.1 maintenance revision is committed and frozen, the
+maintenance session MUST NOT inspect, search for, or receive:
+
+- a prose summary of the semantic changes between v0.8 and v0.8.1;
+- a list of sections affected by the amendment or a checklist of expected
+  implementation changes;
+- the amendment rationale or protocol-review discussion that led to it;
+- the Followee whitepaper;
+- `IMPLEMENTATION.md` or any other implementation brief;
+- the `followee-rs` source, tests, documentation, issues, pull requests, CI
+  output, releases, diffs, or Git history;
+- `SPEC-QUESTIONS.md`, conformance-interface material, or harness adapter
+  contracts not contained in the normative specification;
+- fixture-producing code or fixtures from another implementation;
+- implementation-status or provisional fixtures;
+- Rust-derived expected outputs;
+- baseline archives, promotion proposals, or mutation, fuzzing, coverage,
+  conformance, interoperability, or differential reports;
+- previous reviews, prompts, messages, or conversations that disclose the
+  intended interpretation of v0.8.1 or another implementation's behaviour;
+  or
+- any other Followee repository or unpublished Followee material not listed
+  under approved inputs.
+
+The maintenance session MUST NOT search GitHub or the public web for
+additional Followee material. It may use this repository's own Git history
+because that history is itself an approved input.
+
+## v0.8.1 maintenance procedure
+
+The maintenance pass is performed in a fresh conversation or another context
+containing only the approved inputs above. It shares no protocol code,
+generated parser, fixture generator, algorithmic helper, expected output, or
+semantic change summary with another Followee implementation.
+
+Before modifying the model, the maintainer MUST:
+
+1. verify that the input-preparation commit is based directly on
+   `7be1b3c5f3000cadcd45637e3a96d7bb17ec2023` and that
+   `cleanroom-v0.8-maintenance-freeze` still peels to that commit;
+2. verify the SHA-256 digests of both approved specification files against
+   this document;
+3. read both pinned specifications completely; and
+4. derive and record the semantic delta independently, without receiving a
+   summary, affected-section list, rationale, or expected-change checklist.
+
+Questions or ambiguities are recorded rather than resolved by consulting an
+existing implementation. Every interpretation or model change introduced by
+the v0.8.1 pass MUST be recorded in `AUTHORING-RECORD.md`, including whether
+the change affects code, tests, fixtures, or documentation only. The
+independently derived change account is an output demonstrating comprehension
+of the two specifications; it must not be copied from an input supplied to the
+session.
+
+The maintainer then runs the complete clean-room test suite and commits the
+updated model, tests, specification-derived fixtures, and authoring record in
+one new maintenance commit. It MUST NOT amend or squash the input-preparation
+commit, create or move a tag, or push. The resulting commit is separately
+reviewed and, after any review correction in a descendant commit, frozen under
+a new immutable v0.8.1 maintenance tag before excluded, provisional,
+Rust-derived, or differential material is revealed.
 
 After that freeze, the differential harness may supply provisional input bytes
 to the unchanged model. Expected results remain comparator-side and MUST NOT
