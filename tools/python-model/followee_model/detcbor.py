@@ -29,10 +29,13 @@ Error classification (Sections 6.1 and 15.3):
 * basically valid but non-deterministic or profile-forbidden encodings
   (non-minimal encodings, indefinite lengths, floats, undefined, tags,
   unordered map keys) -> ``nonDeterministicCbor``;
-* depth or member limits exceeded, unassigned simple values, or a map key
-  form the Followee schemas can never admit (container keys, or distinct
-  CBOR keys that would collide in the decoded representation such as
-  ``true`` versus ``1``) -> ``schemaViolation``.
+* depth or member limits exceeded, simple values no v1 schema admits
+  (Section 6.1.2 explicitly classifies simple values other than
+  ``false``, ``true``, ``null``, and ``undefined`` as schema failures,
+  never ``nonDeterministicCbor``), or a map key form the Followee
+  schemas can never admit (container keys, or distinct CBOR keys that
+  would collide in the decoded representation such as ``true`` versus
+  ``1``) -> ``schemaViolation``.
 
 The decoder enforces the deterministic profile while parsing, so a
 value-equal duplicate key with a non-minimal second serialization (for
@@ -193,7 +196,9 @@ class _Decoder:
             raise _nondet("CBOR 'undefined' is forbidden")
         if ai < 20:
             # Well-formed and basically valid; not forbidden by the
-            # Section 6.1.2 profile list; no v1 schema admits it.
+            # Section 6.1.2 profile list; no v1 schema admits it
+            # (explicit in Section 6.1.2: schemaViolation, never
+            # nonDeterministicCbor).
             raise _schema("unassigned CBOR simple value")
         if ai == 24:
             self._need(1)

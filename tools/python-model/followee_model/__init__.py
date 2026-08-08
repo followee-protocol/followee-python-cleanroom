@@ -1,5 +1,5 @@
 """Independent clean-room Python model of the Followee protocol core
-(Followee-Specification.md v0.8, Sections 3-8).
+(Followee-Specification.md v0.8.1, Sections 3-8).
 
 Implements DID derivation and parsing, deterministic CBOR, Authority
 Descriptor binding, COSE Sig_structure construction, Followee-strict

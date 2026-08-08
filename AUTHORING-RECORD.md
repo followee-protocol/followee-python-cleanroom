@@ -454,6 +454,10 @@ implementation was requested, received, or consulted.
    disagreement must open a specification or implementation review
    issue; it must not be treated as permitted multi-fault variation.
    (Corrected wording; see the post-maintenance review note below.)
+   *Resolved by specification v0.8.1*, which states the classification
+   explicitly in Section 6.1.2 — `schemaViolation`, never
+   `nonDeterministicCbor` — exactly as this model had derived; see the
+   v0.8.1 maintenance section below.
 3. *`invalidCbor` versus `nonDeterministicCbor` for indefinite
    lengths*: RFC 8949 treats indefinite-length items as well-formed,
    and Section 6.1.2 rule 1 requires definite lengths, so the model
@@ -513,16 +517,160 @@ source; no excluded, provisional, Rust-derived, or differential
 material was inspected, searched for, or received in raising or
 applying it, and no GitHub or web search was performed.
 
+## v0.8.1 maintenance pass (2026-08-08)
+
+Bounded maintenance pass under the updated `AUTHORING-CONSTRAINTS.md`,
+performed in a fresh session containing only the approved inputs.
+
+**Revisions.**
+- v0.8 base model: commit `7be1b3c5f3000cadcd45637e3a96d7bb17ec2023`
+  (`cleanroom-v0.8-maintenance-freeze`), verified before any change,
+  with the freeze tag still peeling to it.
+- v0.8.1 input-preparation commit:
+  `984e3bbb425a857306d5d39353057493b8c33984`, whose direct parent is the
+  v0.8 freeze, verified before any change.
+- v0.8 specification input (`inputs/v0.8/Followee-Specification.md`):
+  `followee-protocol/followee` commit
+  `610f9a1e78d860e8bd685ef1435a53a16f1221ec`, SHA-256
+  `474f0b3880e838a5232890c3e2edc183c341fd25e28d7db0066ad109aa43113b`,
+  verified.
+- v0.8.1 specification input
+  (`inputs/v0.8.1/Followee-Specification.md`):
+  `followee-protocol/followee` commit
+  `2d5292e95af022af7beee2d154e7217e29907960`, SHA-256
+  `ad9895d1672e3f4f68dac9e2a92c1d04fb63229c406e67dc1041a5971a361b7d`,
+  verified.
+- Existing fixtures `appendix_b.json` (SHA-256
+  `f188316ffd7ad07fe94a842027f1ea7596e42a2f00b0691c1096fa2bfaddb717`)
+  and `appendix_b_v08.json` unchanged and still valid: Appendix B
+  sections B.2-B.11 are textually identical between v0.8 and v0.8.1.
+- Resulting model commit: recorded in Git as the sole child of the
+  input-preparation commit (this maintenance commit).
+
+The semantic delta was derived independently by reading both pinned
+specifications completely, then cross-checked with a mechanical `diff`
+of the two approved files inside this repository.  No summary,
+affected-section list, rationale, expected-change checklist, or other
+implementation was requested, received, or consulted.
+
+**Semantic differences identified (v0.8 → v0.8.1).**
+
+1. *Section 6.1.2 schema-disallowed simple values (normative
+   clarification; codifies this model's existing behavior).*  A new
+   paragraph states that CBOR simple values other than `false`, `true`,
+   `null`, and `undefined` are not admitted by any v1 schema in
+   Appendix A; their shortest encodings are well-formed, basically
+   valid, and deterministic, so an otherwise conforming protocol item
+   containing one passes Sections 6.1.1 and 6.1.2 and produces
+   `schemaViolation` under Section 6.1.3.  It MUST NOT be classified
+   `nonDeterministicCbor` merely because the schema assigns it no
+   meaning, and external registration of semantics for such a value
+   does not alter the closed v1 schemas.  Profile rule 4 is unchanged:
+   `undefined` remains profile-forbidden and produces
+   `nonDeterministicCbor`.  This resolves v0.8 ambiguity 2 above in
+   exactly the direction the model had independently derived
+   (`detcbor.py` since the v0.8 pass).  **No protocol-code change;
+   comments and tests only.**
+2. *Section 15.3 `schemaViolation` description.*  Code 6's meaning is
+   extended to name "use of a well-formed, basically valid,
+   deterministically encoded data-item type that the applicable schema
+   does not admit".  Symbolic error names and numeric codes are
+   unchanged.  **Documentation only.**
+3. *Section 20.1 conformance list.*  New required coverage: exact
+   `schemaViolation` rejection of both one-byte and two-byte
+   deterministically encoded CBOR simple values not admitted by the v1
+   schema, inside otherwise ignored extension values.  **Tests added.**
+4. *Appendix B.7 item 19 and its re-sign note.*  New required mutation
+   class: a deterministically encoded CBOR simple value other than
+   `false`, `true`, `null`, or `undefined`, in both one-byte and
+   two-byte encoding forms, used where the applicable v1 schema admits
+   no such type; item 19 mutations change signed body bytes and must be
+   re-signed by the legitimate key.  Items 15-18 are renumbered only in
+   punctuation (`and` placement); their content is unchanged.  **Tests
+   added.**
+5. *Appendix B.12 (new normative vectors).*  Two fault-isolated
+   schema-disallowed-simple-value records built from the B.4 body
+   (`a6` → `a7` head, appended label-8 extension with key
+   `https://example.com/ext`), re-signed with Alice's root seed:
+   simple value 16 as the one-byte encoding `f0` and simple value 32 as
+   the two-byte encoding `f8 20`.  Both produce exactly
+   `schemaViolation`; reporting `invalidSignature` indicates altered
+   bytes, and reporting `nonDeterministicCbor` indicates the
+   misclassification the new Section 6.1.2 paragraph forbids.
+   **Fixture and tests added**; bodies, digests, Sig_structure lengths,
+   and signatures reproduced byte-exactly.
+6. *Section 1.1 status paragraph and version header (v0.8.1,
+   8 August 2026).*  The status text itself states the amendment's
+   bounded scope: no wire encoding, cryptographic rule, authority rule,
+   ordering rule, or relay behaviour changes.  This matches the
+   mechanical diff: no other section of the specification changed.
+   **Documentation only.**
+
+**Changes made.**
+
+- Code: none to protocol behavior.  `followee_model/detcbor.py`
+  docstring and `_decode_major7` comment updated to cite the now
+  explicit Section 6.1.2 classification; `followee_model/__init__.py`
+  docstring version updated to v0.8.1.
+- Fixtures: new `fixtures/specification/appendix_b_v081.json`,
+  mechanically extracted by hand from Appendix B.12 of the pinned
+  `inputs/v0.8.1/Followee-Specification.md` in this repository
+  (provenance block embedded in the file).  `appendix_b.json` and
+  `appendix_b_v08.json` are unchanged.
+- Tests: new `tests/test_v081_conformance.py` (B.12 reproduction with
+  exact `schemaViolation` assertions and appended-byte structure
+  checks; a model-derived nested-position variant; decoder-layer
+  classification boundaries for one-byte and two-byte simple values,
+  `undefined`, and the ill-formed two-byte form below 32).  Existing
+  tests unchanged; `tests/test_detcbor.py` already asserted
+  `schemaViolation` for `f0` and `f820` since the v0.8 pass.
+- Documentation: this section; v0.8 ambiguity 2 marked resolved;
+  `tools/python-model/README.md` updated.
+
+**Ambiguities found in the v0.8.1 delta.**  None.  The delta is a
+single prescriptive clarification plus its vectors, and it agrees with
+the classification this model had already derived and recorded.  The
+remaining open note from the v0.8 pass (ambiguity 3,
+`nonDeterministicCbor` for indefinite lengths under rule 7's
+"profile-forbidden encoding" phrasing) is untouched by v0.8.1 and
+stands unchanged.
+
+**External material consulted for the v0.8.1 pass.**  None fetched
+over the network.  RFC 8949's simple-value forms (one-byte values
+0-23, two-byte values 32-255, the not-well-formed two-byte forms below
+32) were applied from working knowledge (RFC 8949 already listed in
+the standards table).  No new dependencies were added; the model
+remains Python 3.10 standard-library only.
+
+**Exclusion statement.**  No excluded or provisional Followee material
+was inspected, searched for, received, or supplied during this pass:
+no prose summary of the v0.8→v0.8.1 changes, affected-section list,
+amendment rationale, or expected-change checklist; no `followee-rs`
+source, tests, documentation, issues, CI output, diffs, or history; no
+whitepaper; no `IMPLEMENTATION.md`, `SPEC-QUESTIONS.md`,
+conformance-interface material, or fixture-producing code from another
+implementation; no implementation-status or provisional fixtures; no
+Rust-derived expected outputs; no baseline archives, promotion
+proposals, or mutation, fuzzing, coverage, conformance,
+interoperability, or differential reports; and no GitHub or web
+searches for Followee material.  The only inputs were this repository
+at commit `984e3bb` (including its own Git history) and the two
+approved specification files verified by SHA-256 against
+`AUTHORING-CONSTRAINTS.md` before any change.
+
 ## Reproduction confidence
 
-All 193 unit tests pass (155 at the v0.6 freeze, plus 5 post-freeze
+All 200 unit tests pass (155 at the v0.6 freeze, plus 5 post-freeze
 regression tests, plus 13 v0.7 conformance and regression tests, plus
-20 v0.8 conformance, mutation, and decoder-classification tests),
+20 v0.8 conformance, mutation, and decoder-classification tests, plus
+7 v0.8.1 conformance tests),
 including byte-exact independent reproduction of
 every Appendix B value from seeds and structured inputs — now including
-the v0.8 B.9 Bob identity and all five B.10 fault-isolated
-basic-validity vectors (bodies, digests, Sig_structure lengths,
-signatures) — the three identity-binding permutations of B.7 item 1,
-the B.7 mutation list with its normative error assignments including
-the new item 18 class, and the B.8 descriptor-substitution attack
-(signature valid, rejected `identityBindingMismatch` at step 9).
+the v0.8 B.9 Bob identity, all five B.10 fault-isolated
+basic-validity vectors, and both v0.8.1 B.12 fault-isolated
+schema-disallowed-simple-value vectors (bodies, digests, Sig_structure
+lengths, signatures) — the three identity-binding permutations of B.7
+item 1, the B.7 mutation list with its normative error assignments
+including the item 18 and item 19 classes, and the B.8
+descriptor-substitution attack (signature valid, rejected
+`identityBindingMismatch` at step 9).
