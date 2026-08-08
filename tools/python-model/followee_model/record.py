@@ -128,6 +128,15 @@ def validate_extension_value(value, context: str) -> None:
                 raise _schema(f"{context}: extension object key must be int or tstr")
             validate_extension_value(item, context)
         return
+    if isinstance(value, detcbor.SimpleValue):
+        # Deterministic but schema-disallowed simple value (Section 6.1.2
+        # v0.8.1 paragraph, Appendix B.12): passes the deterministic-CBOR
+        # layer and is rejected here by the Appendix A extension-value
+        # schema.
+        raise _schema(
+            f"{context}: CBOR simple value {value.value} is not admitted "
+            "by the extension-value schema"
+        )
     raise _schema(f"{context}: forbidden extension value type")
 
 

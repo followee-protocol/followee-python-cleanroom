@@ -309,3 +309,41 @@ After that freeze, the differential harness may supply provisional input bytes
 to the unchanged model. Expected results remain comparator-side and MUST NOT
 be supplied to the adapter or model. Agreement or disagreement is recorded by
 the harness; it is not resolved by silently changing the frozen model.
+
+## Preserved v0.8.1 maintenance freeze
+
+The reviewed v0.8.1 model is frozen through the following immutable lineage:
+
+| Artefact | Revision |
+| --- | --- |
+| v0.8.1 maintenance input | `984e3bbb425a857306d5d39353057493b8c33984` |
+| Reviewed v0.8.1 maintenance freeze | `2a27565107d7b383e15ccb3972a11bdf5eb55aa2` (`cleanroom-v0.8.1-maintenance-freeze`) |
+
+This freeze and every earlier tag and commit named by this document MUST NOT
+be moved, rewritten, squashed, or deleted.
+
+## Post-freeze differential conformance corrections
+
+A defect exposed by a post-freeze differential result may be corrected in the
+production model, subject to all of the following:
+
+1. The correction is **reviewed conformance work, not independent clean-room
+   evidence**, and MUST be recorded as such in `AUTHORING-RECORD.md`,
+   identifying the differential result that prompted it. It MUST NOT be
+   represented as an independent maintenance pass.
+2. The freeze commit and tag that produced the disagreement are preserved
+   unchanged as the evidence of the independent interpretation; they MUST NOT
+   be amended, moved, squashed, or deleted. Corrections are authored as
+   descendants of the freeze and reviewed before any new tag is created.
+3. The correction is derived only from the differential requirement statement
+   and the pinned specifications. The Rust implementation and all other
+   material excluded above remain excluded as sources: its source, tests, or
+   outputs MUST NOT be inspected to author the correction.
+4. The correction changes the production model itself, with production-path
+   tests; classification logic MUST NOT be moved into an adapter or test-only
+   helper to mask a model defect.
+
+One such correction has been applied: the deterministic-CBOR/schema layering
+correction for schema-disallowed simple values (2026-08-08), recorded in
+`AUTHORING-RECORD.md` under "Post-freeze differential conformance
+correction".

@@ -15,8 +15,19 @@ Followee-Specification.md Section 6.1:
    floating-point values, ``undefined``, and tags (including bignum tags)
    forbidden.  (The required outer COSE tag 18 is handled by the envelope
    parser, not here.)
-3. *Schema* (Section 6.1.3): the depth and member limits passed by the
-   caller, plus key forms no Followee schema admits.
+3. *Structural limits* (Section 6.1.3): the depth and member limits passed
+   by the caller, plus key forms this decoder's Python representation can
+   never hold faithfully (container keys, or distinct CBOR keys that would
+   collide as Python dict keys such as ``true`` versus ``1``).
+
+Full schema admission (Section 6.1.3) is *not* applied here: it belongs to
+the record, descriptor, contact, and envelope parsers.  In particular, a
+deterministically encoded CBOR simple value other than ``false``, ``true``,
+``null``, and ``undefined`` passes Sections 6.1.1 and 6.1.2 (the v0.8.1
+Section 6.1.2 paragraph makes this explicit) and is decoded to a
+:class:`SimpleValue` preserving its generic-data-model type and numeric
+value; the schema parsers reject it with ``schemaViolation`` wherever their
+schemas do not admit it.
 
 The decoder verifies exactly the received bytes: a successfully decoded value
 re-encodes to the identical byte string via :func:`encode`.
@@ -24,18 +35,15 @@ re-encodes to the identical byte string via :func:`encode`.
 Error classification (Sections 6.1 and 15.3):
 
 * not well-formed (truncation, reserved values, trailing bytes, unexpected
-  break), or well-formed but basically invalid (duplicate map keys, invalid
-  UTF-8 text) -> ``invalidCbor``;
+  break, two-byte simple values below 32), or well-formed but basically
+  invalid (duplicate map keys, invalid UTF-8 text) -> ``invalidCbor``;
 * basically valid but non-deterministic or profile-forbidden encodings
   (non-minimal encodings, indefinite lengths, floats, undefined, tags,
   unordered map keys) -> ``nonDeterministicCbor``;
-* depth or member limits exceeded, simple values no v1 schema admits
-  (Section 6.1.2 explicitly classifies simple values other than
-  ``false``, ``true``, ``null``, and ``undefined`` as schema failures,
-  never ``nonDeterministicCbor``), or a map key form the Followee
-  schemas can never admit (container keys, or distinct CBOR keys that
-  would collide in the decoded representation such as ``true`` versus
-  ``1``) -> ``schemaViolation``.
+* depth or member limits exceeded, or a map key form the decoded
+  representation can never admit (container keys, or distinct CBOR keys
+  that would collide in the decoded representation such as ``true``
+  versus ``1``) -> ``schemaViolation``.
 
 The decoder enforces the deterministic profile while parsing, so a
 value-equal duplicate key with a non-minimal second serialization (for
@@ -45,10 +53,62 @@ meets first.  The fault-isolated adjacent-duplicate case of Appendix B.10
 has byte-identical keys and is always classified ``invalidCbor``.
 
 Decoded values use plain Python types: int, bytes, str, bool, None, list,
-dict.  Booleans are distinct from integers in both directions.
+dict, plus :class:`SimpleValue` for the schema-disallowed but deterministic
+simple values.  Booleans are distinct from integers in both directions, and
+``SimpleValue`` is distinct from every other type in both directions.
 """
 
 from .errors import ErrorCode, FolloweeError
+
+
+class SimpleValue:
+    """A decoded CBOR simple value other than ``false``, ``true``, and
+    ``null`` (major type 7, numeric values 0..19 and 32..255).
+
+    The v0.8.1 Section 6.1.2 paragraph makes such values well-formed,
+    basically valid, and deterministic in their shortest encodings; whether
+    a given schema admits them is a Section 6.1.3 question answered by the
+    schema parsers, never by the deterministic-CBOR decoder.
+
+    The representation is immutable and hashable, and compares equal only
+    to another ``SimpleValue`` with the same numeric value, so it can never
+    collide with ``int``, ``bool``, or any other decoded type -- including
+    as a map key: ``SimpleValue(0)``, integer ``0``, and ``false`` are
+    three distinct generic-data-model keys.
+
+    Values 20..23 (``false``, ``true``, ``null``, ``undefined``) have
+    dedicated decoded representations or are profile-forbidden; values
+    24..31 have no well-formed encoding (RFC 8949).  Both ranges are
+    rejected by construction.
+    """
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: int):
+        if type(value) is not int or not 0 <= value <= 255:
+            raise ValueError("simple value must be an integer in 0..255")
+        if 20 <= value <= 31:
+            raise ValueError(
+                f"simple value {value} has no SimpleValue representation"
+            )
+        object.__setattr__(self, "value", value)
+
+    def __setattr__(self, name, value):
+        raise AttributeError("SimpleValue is immutable")
+
+    def __delattr__(self, name):
+        raise AttributeError("SimpleValue is immutable")
+
+    def __eq__(self, other):
+        if type(other) is SimpleValue:
+            return other.value == self.value
+        return NotImplemented
+
+    def __hash__(self):
+        return hash((SimpleValue, self.value))
+
+    def __repr__(self):
+        return f"SimpleValue({self.value})"
 
 
 def _invalid(message: str) -> "FolloweeError":
@@ -195,18 +255,18 @@ class _Decoder:
         if ai == 23:
             raise _nondet("CBOR 'undefined' is forbidden")
         if ai < 20:
-            # Well-formed and basically valid; not forbidden by the
-            # Section 6.1.2 profile list; no v1 schema admits it
-            # (explicit in Section 6.1.2: schemaViolation, never
-            # nonDeterministicCbor).
-            raise _schema("unassigned CBOR simple value")
+            # Well-formed, basically valid, deterministic (the v0.8.1
+            # Section 6.1.2 paragraph).  Schema admission is a
+            # Section 6.1.3 question for the schema parsers; the decoder
+            # preserves the value as a distinct generic-data-model type.
+            return SimpleValue(ai)
         if ai == 24:
             self._need(1)
             value = self.data[self.pos]
             self.pos += 1
             if value < 32:
                 raise _invalid("ill-formed two-byte simple value")
-            raise _schema("unassigned CBOR simple value")
+            return SimpleValue(value)
         if ai in (25, 26, 27):
             raise _nondet("floating-point values are forbidden")
         if ai == 31:
@@ -249,6 +309,14 @@ def _encode_item(value, out: bytearray) -> None:
         out.append(0xF5)
     elif value is None:
         out.append(0xF6)
+    elif isinstance(value, SimpleValue):
+        # Shortest encoding: one byte for 0..19, two bytes for 32..255
+        # (no other numeric values are constructible).
+        if value.value < 24:
+            out.append(0xE0 | value.value)
+        else:
+            out.append(0xF8)
+            out.append(value.value)
     elif isinstance(value, int):
         if value >= 0:
             _encode_head(0, value, out)

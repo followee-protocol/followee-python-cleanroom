@@ -658,12 +658,93 @@ at commit `984e3bb` (including its own Git history) and the two
 approved specification files verified by SHA-256 against
 `AUTHORING-CONSTRAINTS.md` before any change.
 
+## Post-freeze differential conformance correction (2026-08-08)
+
+**Provenance and status.**  After the v0.8.1 maintenance freeze
+(`2a27565107d7b383e15ccb3972a11bdf5eb55aa2`,
+`cleanroom-v0.8.1-maintenance-freeze`), a neutral differential run
+reported a disagreement on fault-isolated bare CBOR simple values under
+the harness operation `validateCbor`, which applies Sections 6.1.1 and
+6.1.2 plus explicit depth/member limits but no record or envelope
+schema.  This correction was prompted by that post-freeze differential
+result and is therefore **reviewed conformance work, not independent
+clean-room evidence**.  The v0.8.1 freeze commit and tag are preserved
+unchanged as the evidence of the independent interpretation that
+produced the disagreement.  The correction was derived solely from the
+differential requirement statement and the pinned v0.8.1 specification;
+no Rust source, tests, fixtures, outputs, or other excluded material was
+inspected, searched for, or received.
+
+**Root cause.**  The frozen model applied schema policy inside the
+deterministic-CBOR layer: `detcbor.decode` raised `schemaViolation` for
+deterministically encoded simple values other than `false`, `true`,
+`null`, and `undefined` (`f0` = simple value 16, `f8 20` = simple
+value 32) instead of decoding them.  Under the v0.8.1 Section 6.1.2
+paragraph such values *pass* Sections 6.1.1 and 6.1.2; the
+`schemaViolation` belongs to Section 6.1.3, i.e. to the schema parsers.
+Every symbolic result for complete records was correct (Appendix B.12
+still `schemaViolation`), but a structural validator applying no schema
+must accept the bare values, which the frozen decoder did not.
+
+**Production change (no adapter or test-only classification).**
+
+- `followee_model/detcbor.py`: new immutable, hashable `SimpleValue`
+  class preserving the CBOR generic-data-model type and numeric value
+  (constructible for 0..19 and 32..255 only; equal solely to another
+  `SimpleValue` of the same value, so it can never collide with `int`,
+  `bool`, or any other decoded type, including as a map key —
+  `SimpleValue(0)`, integer `0`, and `false` are distinct keys).
+  `decode` returns `SimpleValue` for one-byte simple values 0..19 and
+  two-byte simple values 32..255; `encode` emits their shortest
+  encodings, preserving the byte-exact round-trip invariant.
+- `followee_model/record.py`: `validate_extension_value` rejects
+  `SimpleValue` explicitly with `schemaViolation` (the Appendix B.12
+  positions).  Audit of the remaining schema parsers (record body,
+  descriptor, public key, contact, service, migration, extension keys
+  and objects, COSE envelope): all already reject `SimpleValue` in
+  every typed position through their exact-type checks
+  (`type(x) is int`, `isinstance(x, str/bytes/dict/list)`); this is now
+  locked by tests.
+
+**Unchanged behavior.**  `undefined` (`f7`) remains profile-forbidden:
+`nonDeterministicCbor`.  Two-byte simple encodings below 32 (`f8 00`,
+`f8 1f`) remain not well-formed: `invalidCbor`.  Decoded-representation
+key collisions (interpretation 18: container keys, `true` versus `1`,
+`0` versus `false`) are unchanged.  Both complete B.12 envelopes still
+fail with exactly `schemaViolation`; the failure now arises at the
+Section 8.1 step 15 extension check (after signature verification)
+rather than inside the step 4 decode, which matches the numbered-step
+ordering of interpretation 2 — the reported code is identical.
+
+**Files changed.**  `followee_model/detcbor.py`,
+`followee_model/record.py`, new
+`tests/test_simple_value_layering.py`, `tests/test_detcbor.py` and
+`tests/test_v081_conformance.py` (the two decoder-layer expectations
+updated from rejection to structural acceptance; the B.12 record-level
+assertions untouched), `tools/python-model/README.md`,
+`AUTHORING-RECORD.md`, `AUTHORING-CONSTRAINTS.md`.
+
+**Tests.**  22 tests added in `tests/test_simple_value_layering.py`:
+decoder acceptance of one-byte and two-byte forms including the bare
+B.12 values `f0` and `f8 20` with byte-exact round-trips; `SimpleValue`
+type-safety (distinctness from `int`/`bool`/`None`, equality, hashing,
+immutability, unconstructible values 20..31, map-key type identity);
+structural preservation in nested arrays and maps; `schemaViolation`
+from every schema parser in representative typed positions (extension
+value/array/object/key, record-body value and label, descriptor version
+and label, public-key suite, contact displayName, alsoKnownAs entry,
+service id, migration value, COSE payload and protected header); a
+fully signed record whose only fault is a simple value (signature
+verifies, then `schemaViolation`); and both exact B.12 envelopes
+re-verified.  The complete suite passes: 222 tests.
+
 ## Reproduction confidence
 
-All 200 unit tests pass (155 at the v0.6 freeze, plus 5 post-freeze
+All 222 unit tests pass (155 at the v0.6 freeze, plus 5 post-freeze
 regression tests, plus 13 v0.7 conformance and regression tests, plus
 20 v0.8 conformance, mutation, and decoder-classification tests, plus
-7 v0.8.1 conformance tests),
+7 v0.8.1 conformance tests, plus 22 post-freeze layering-correction
+tests),
 including byte-exact independent reproduction of
 every Appendix B value from seeds and structured inputs — now including
 the v0.8 B.9 Bob identity, all five B.10 fault-isolated

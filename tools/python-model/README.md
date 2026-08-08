@@ -9,6 +9,13 @@ clean-room maintenance passes (see `AUTHORING-RECORD.md`).  Its purpose is
 differential comparison against other implementations, so it favors
 clarity and exact specification wording over performance.
 
+After the v0.8.1 freeze, one transparent conformance correction was applied
+(deterministic-CBOR/schema layering for schema-disallowed simple values).
+It was prompted by a post-freeze differential result and is therefore
+reviewed conformance work, not independent clean-room evidence; see the
+"Post-freeze differential conformance correction" section of
+`AUTHORING-RECORD.md`.
+
 ## Scope
 
 Sections 3-8 of the specification:
@@ -16,7 +23,7 @@ Sections 3-8 of the specification:
 | Module | Covers |
 | --- | --- |
 | `followee_model/errors.py` | Symbolic wire error codes (Section 15.3) |
-| `followee_model/detcbor.py` | Deterministic CBOR encode and strict decode under the Section 6.1 layers (well-formedness and basic validity, deterministic profile, schema); exact received bytes are the bytes verified |
+| `followee_model/detcbor.py` | Deterministic CBOR encode and strict decode under Sections 6.1.1 and 6.1.2 plus caller depth/member limits; schema-disallowed but deterministic simple values decode to `SimpleValue` (schema admission is the schema parsers' job); exact received bytes are the bytes verified |
 | `followee_model/base58.py` | Base58btc without padding |
 | `followee_model/did.py` | DID syntax, multihash profile, `invalidDid` vs `unsupportedHash` (Sections 3.1, 4.3) |
 | `followee_model/ed25519.py` | Pure RFC 8032 Ed25519 plus Followee-strict verification (Section 3.3) |
@@ -61,7 +68,11 @@ fault-isolated schema-disallowed-simple-value vectors against
 `schemaViolation` classification that Section 6.1.2 makes explicit in
 v0.8.1 for simple values no v1 schema admits.  The relay-wrapper
 changes and Appendix B.11 vectors are out of this model's Sections 3-8
-scope.
+scope.  `tests/test_simple_value_layering.py` covers the post-freeze
+layering correction: `detcbor.decode` accepts deterministic
+schema-disallowed simple values as `SimpleValue`, the schema parsers
+produce the `schemaViolation`, and the B.12 record-level classification
+is unchanged.
 
 Interpretation decisions and ambiguities encountered during authoring are
 recorded in `../../AUTHORING-RECORD.md`.

@@ -111,10 +111,12 @@ class DecodeStrictnessTests(unittest.TestCase):
             self.assert_code(data_hex, ErrorCode.NON_DETERMINISTIC_CBOR)
 
     def test_unassigned_simple_values(self):
-        # Well-formed and basically valid; not in the Section 6.1.2 profile
-        # list; rejected at the schema layer (Section 6.1.3 fallback).
-        self.assert_code("f0", ErrorCode.SCHEMA_VIOLATION)  # simple(16)
-        self.assert_code("f820", ErrorCode.SCHEMA_VIOLATION)  # simple(32)
+        # Well-formed, basically valid, and deterministic; the decoder
+        # accepts them as SimpleValue (post-freeze layering correction,
+        # 2026-08-08: schema admission belongs to the schema parsers, not
+        # this layer).  See test_simple_value_layering.py.
+        self.assertEqual(dec("f0"), detcbor.SimpleValue(16))
+        self.assertEqual(dec("f820"), detcbor.SimpleValue(32))
         self.assert_code("f800", ErrorCode.INVALID_CBOR)  # ill-formed two-byte
 
     def test_tags_rejected(self):

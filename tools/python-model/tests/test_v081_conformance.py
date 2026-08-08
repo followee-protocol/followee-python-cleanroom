@@ -17,10 +17,12 @@ Covers:
    from structured inputs, re-signed with Alice's legitimate root seed,
    and compared against the specification-status v0.8.1 fixture; each
    complete envelope MUST fail with exactly ``schemaViolation``;
-2. Appendix B.7 item 19 at the decoder layer: both encoding forms are
-   ``schemaViolation``; the classification boundaries with ``undefined``
-   (``nonDeterministicCbor``) and the ill-formed two-byte form below 32
-   (``invalidCbor``) are unchanged;
+2. the layer boundaries around Appendix B.7 item 19: both encoding forms
+   pass the deterministic-CBOR layer (post-freeze layering correction,
+   2026-08-08: they decode to ``detcbor.SimpleValue`` and the *schema*
+   parsers produce the ``schemaViolation``); the classification
+   boundaries with ``undefined`` (``nonDeterministicCbor``) and the
+   ill-formed two-byte form below 32 (``invalidCbor``) are unchanged;
 3. position independence: the same simple value nested deeper inside an
    otherwise valid unknown extension is still ``schemaViolation``.
 
@@ -166,7 +168,13 @@ class SchemaDisallowedSimpleValueB12(unittest.TestCase):
 
 class SimpleValueClassificationBoundaries(unittest.TestCase):
     """Section 6.1.2 (v0.8.1 paragraph) and B.7 item 19 at the decoder
-    layer: exact classification of every simple-value form."""
+    layer: exact classification of every simple-value form.
+
+    Post-freeze layering correction (2026-08-08): the schema-disallowed
+    but deterministic forms now *pass* this layer as
+    ``detcbor.SimpleValue``; the ``schemaViolation`` is produced by the
+    schema parsers (see ``test_simple_value_layering.py`` and the B.12
+    record-level tests above, whose classification is unchanged)."""
 
     def decode_code(self, data_hex: str) -> ErrorCode:
         try:
@@ -186,12 +194,18 @@ class SimpleValueClassificationBoundaries(unittest.TestCase):
         )
         self.assertIsNone(detcbor.decode(b"\xf6", max_depth=8, max_members=256))
 
-    def test_schema_disallowed_simple_values(self):
+    def test_schema_disallowed_simple_values_pass_deterministic_layer(self):
         # One-byte encodings 0..19 and two-byte encodings 32..255 pass
-        # Sections 6.1.1 and 6.1.2 and fail at the schema layer.
-        for data_hex in ("e0", "f0", "f3", "f820", "f8ff"):
+        # Sections 6.1.1 and 6.1.2; schema admission is decided by the
+        # schema parsers under Section 6.1.3.
+        expected = {"e0": 0, "f0": 16, "f3": 19, "f820": 32, "f8ff": 255}
+        for data_hex, value in expected.items():
             self.assertEqual(
-                self.decode_code(data_hex), ErrorCode.SCHEMA_VIOLATION, data_hex
+                detcbor.decode(
+                    bytes.fromhex(data_hex), max_depth=8, max_members=256
+                ),
+                detcbor.SimpleValue(value),
+                data_hex,
             )
 
     def test_undefined_remains_profile_forbidden(self):
